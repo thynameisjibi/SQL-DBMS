@@ -111,9 +111,8 @@ class DBMS:
                 self.meta_db.put(referencing_table_key, referencing_table_db)
         self.meta_db.delete(table_key)
         
-        # remove table records
-        table_db_file = self.meta_db.get_db_file(table_name)
-        table_db_file.unlink()
+        # remove table records (delete all backend files, see DB.remove_files)
+        DB(table_name).remove_files()
         self.meta_db.close_db()
         
         return DropSuccess(table_name)

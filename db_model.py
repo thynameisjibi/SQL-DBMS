@@ -221,6 +221,18 @@ class DB:
         if key in self.DB:
             del self.DB[key]
 
+    def remove_files(self):
+        """Delete every on-disk file backing this store.
+
+        dbm's filename scheme is backend-specific: gdbm (typical on Linux) writes
+        a single file at the exact path, ndbm (macOS) appends another ".db", and
+        dumb (the only backend on Windows) writes ".dir"/".dat"/".bak" siblings.
+        Globbing the base name removes the store on every platform instead of
+        assuming gdbm's single-file layout.
+        """
+        for path in self.db_dir.glob(self.db_file.name + "*"):
+            path.unlink()
+
     def delete_by_cursor(self, cursor):
         cursor.delete()
 
@@ -249,9 +261,6 @@ class MetaDB(DB):
         if not value:
             return None
         return Table.deserialize(value)
-    
-    def get_db_file(self, db_name):
-        return self.db_dir / (db_name + ".db")
 
     def create_key_from_value(self, table_name):
         return table_name.encode()
