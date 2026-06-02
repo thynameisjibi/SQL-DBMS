@@ -1,0 +1,14 @@
+{
+  "name": "SQL-DBMS",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/app",
+  // With "Reopen in Container" (VS Code / Cursor), the editor, its terminal,
+  // and the AI agent all run INSIDE the container — Berkeley DB is already
+  // installed, so `python run.py` just works with no host setup.
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python"]
+    }
+  }
+}

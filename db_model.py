@@ -4,7 +4,7 @@ from typing import Dict, Set, Tuple
 from pathlib import Path
 from uuid import uuid4
 
-from berkeleydb import db
+import dbm  # Python's built-in key/value store; replaces Berkeley DB
 
 from messages import *
 
@@ -132,65 +132,107 @@ row = TableRow(
 )
 '''
 
+class Cursor:
+    """Iterates a dbm store and supports delete-at-position.
+
+    Berkeley DB handed back a native cursor; dbm has no cursor concept, so we
+    snapshot the keys at creation time and walk them. Snapshotting also makes it
+    safe to delete the current record while iterating (which delete()/select()
+    rely on) without disturbing the walk.
+    """
+    def __init__(self, store):
+        self._store = store
+        self._keys = list(store.keys())
+        self._index = -1
+        self._current_key = None
+
+    def first(self):
+        self._index = 0
+        return self._read()
+
+    def next(self):
+        self._index += 1
+        return self._read()
+
+    def _read(self):
+        # Skip over keys that were deleted since the snapshot was taken.
+        while self._index < len(self._keys):
+            key = self._keys[self._index]
+            if key in self._store:
+                self._current_key = key
+                return key, self._store[key]
+            self._index += 1
+        self._current_key = None
+        return None
+
+    def delete(self):
+        if self._current_key is not None and self._current_key in self._store:
+            del self._store[self._current_key]
+
+    def close(self):
+        pass
+
+
 class DB:
     """One database, One table"""
     def __init__(self, db_name: str):
         self.db_dir = Path("./DB")
+        self.db_dir.mkdir(exist_ok=True)
         self.db_name = db_name
         self.db_file = self.db_dir / (self.db_name + ".db")
-        
+
     def open_db(self):
-        self.DB = db.DB()
-        if self.db_file.exists():
-            self.DB.open(str(self.db_file), dbname=self.db_name, dbtype=db.DB_HASH)
-        else:
-            self.DB.open(str(self.db_file), dbname=self.db_name, dbtype=db.DB_HASH, flags=db.DB_CREATE)
-        
+        # 'c' opens the store for read/write, creating it if it does not exist.
+        self.DB = dbm.open(str(self.db_file), "c")
+
     def close_db(self):
         self.DB.close()
-        
+
     def create_cursor(self):
-        return self.DB.cursor()
-        
+        return Cursor(self.DB)
+
     def discard_cursor(self, cursor):
         cursor.close()
-        
+
     def get_dbname(self):
-        return self.DB.get_dbname()
-    
+        return self.db_name
+
     def create_key_from_value(self, primary_tuple: tuple):  # if has primary key
         return str(primary_tuple).encode()
-    
+
     def create_random_key(self):  # if no primary key
         return uuid4().bytes
-    
+
     def exists(self, key):
-        return self.DB.exists(key)
-    
+        return key in self.DB
+
     def get(self, key):
-        dataobj = self.DB.get(key, default=None)
+        if key not in self.DB:
+            return None
+        dataobj = self.DB[key]
         if not dataobj:
             return None
         return Record.deserialize(dataobj)
 
     def put(self, key, dataobj):
-        self.DB.put(key, dataobj.serialize())
-    
+        self.DB[key] = dataobj.serialize()
+
     def delete(self, key):
-        self.DB.delete(key)
-    
+        if key in self.DB:
+            del self.DB[key]
+
     def delete_by_cursor(self, cursor):
         cursor.delete()
-        
+
     def keys(self):
-        return self.DB.keys()
-    
+        return list(self.DB.keys())
+
     def values(self):
-        return self.DB.values()
-    
+        return [self.DB[key] for key in self.DB.keys()]
+
     def items(self):
-        return self.DB.items()
-    
+        return [(key, self.DB[key]) for key in self.DB.keys()]
+
     def define_meta(self, meta):
         self.meta = meta
         
@@ -201,7 +243,9 @@ class MetaDB(DB):
         super().__init__(db_name)
     
     def get(self, key):
-        value = self.DB.get(key, default=None)
+        if key not in self.DB:
+            return None
+        value = self.DB[key]
         if not value:
             return None
         return Table.deserialize(value)

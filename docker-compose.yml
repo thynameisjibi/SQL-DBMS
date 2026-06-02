@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    # Mount the source tree so edits made by Claude Code / Cursor on the host
+    # are reflected instantly in the container — no rebuild between iterations.
+    volumes:
+      - .:/app
+      # Keep the Berkeley DB files in a named volume, NOT on the host. DB files
+      # are version-specific binaries; this avoids clashes with any host install
+      # and keeps them out of the candidate's git fork.
+      - dbdata:/app/DB
+    stdin_open: true   # interactive REPL (docker compose run app)
+    tty: true
+    # For Challenge 2 (client/server) uncomment and pick your port:
+    # ports:
+    #   - "8000:8000"
+
+volumes:
+  dbdata:
