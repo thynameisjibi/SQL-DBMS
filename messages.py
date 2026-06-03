@@ -57,6 +57,16 @@ class UpdateResult(SuccessLog):
     def __init__(self, num_updated):
         self.num_updated = num_updated
         super().__init__(f"'{self.num_updated}' row(s) are updated")
+
+
+class CreateIndexSuccess(SuccessLog):
+    def __init__(self, index_name, table_name, column_name):
+        super().__init__(f"Index '{index_name}' created on '{table_name}({column_name})'")
+
+
+class DropIndexSuccess(SuccessLog):
+    def __init__(self, index_name, table_name):
+        super().__init__(f"Index '{index_name}' dropped from '{table_name}'")
         
 
 # ---------------------------------------------------------------------------- #
@@ -260,3 +270,21 @@ class UpdateColumnNonNullableError(Exception):
     def __init__(self, column_name):
         self.column_name = column_name
         super().__init__(f"Update has failed: '{self.column_name}' is not nullable")
+
+
+class DuplicateIndexError(Exception):
+    """Raised when creating an index that already exists."""
+    def __init__(self, index_name):
+        super().__init__(f"Create index has failed: '{index_name}' already exists")
+
+
+class NoSuchIndexError(Exception):
+    """Raised when dropping a non-existent index."""
+    def __init__(self, index_name):
+        super().__init__(f"Drop index has failed: '{index_name}' does not exist")
+
+
+class IndexExistenceError(Exception):
+    """Raised when creating an index on a column that already has an index."""
+    def __init__(self, column_name):
+        super().__init__(f"Create index has failed: column '{column_name}' is already indexed")

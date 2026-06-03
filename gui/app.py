@@ -69,7 +69,7 @@ def execute_query():
 
     try:
         sql_transformer = SQLTransformer()
-        statement, table, record, tables, select_columns, where = parse_query(
+        statement, table, record, tables, select_columns, where, index = parse_query(
             sql_parser, sql_transformer, query
         )
 
@@ -159,6 +159,33 @@ def execute_query():
                 }
             })
 
+        elif statement == "create index":
+            result = dbms.create_index(
+                table["table_name"],
+                index["index_name"],
+                index["column_name"]
+            )
+            return jsonify({
+                'success': True,
+                'data': {
+                    'statement': 'create_index',
+                    'message': str(result)
+                }
+            })
+
+        elif statement == "drop index":
+            result = dbms.drop_index(
+                table["table_name"],
+                index["index_name"]
+            )
+            return jsonify({
+                'success': True,
+                'data': {
+                    'statement': 'drop_index',
+                    'message': str(result)
+                }
+            })
+
         else:
             return jsonify({
                 'success': False,
@@ -171,7 +198,8 @@ def execute_query():
             InsertTypeMismatchError, InsertColumnExistenceError, InsertColumnNonNullableError,
             InsertDuplicatePrimaryKeyError, InsertReferentialIntegrityError,
             SelectTableExistenceError, SelectColumnResolveError,
-            WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference) as e:
+            WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference,
+            DuplicateIndexError, NoSuchIndexError, IndexExistenceError) as e:
         error_type = type(e).__name__
         return jsonify({
             'success': False,

@@ -51,9 +51,8 @@ class TestDBMSIndexIntegration(unittest.TestCase):
         self.dbms.insert({"table_name": "employees", "column_name_list": None}, [2, "Bob"])
         
         # Create index
-        result = self.dbms.create_index("employees", "name")
-        self.assertIn("Index created", result)
-        self.assertIn("employees.name", result)
+        result = self.dbms.create_index("employees", "idx_name", "name")
+        self.assertIn("created", str(result).lower())
         
         # Verify metadata was updated
         table = self.dbms.explain_describe_desc("employees")
@@ -72,15 +71,15 @@ class TestDBMSIndexIntegration(unittest.TestCase):
         }
         self.dbms.create_table(table_dict)
         self.dbms.insert({"table_name": "products", "column_name_list": None}, ["ABC123", 100])
-        self.dbms.create_index("products", "price")
+        self.dbms.create_index("products", "idx_price", "price")
         
         # Verify index exists
         table = self.dbms.explain_describe_desc("products")
         self.assertTrue(table.is_indexed("price"))
         
         # Drop index
-        result = self.dbms.drop_index("products", "price")
-        self.assertIn("Index dropped", result)
+        result = self.dbms.drop_index("products", "idx_price")
+        self.assertIn("dropped", str(result).lower())
         
         # Verify metadata was updated
         table = self.dbms.explain_describe_desc("products")
@@ -97,7 +96,7 @@ class TestDBMSIndexIntegration(unittest.TestCase):
             "foreign_key_dict": {}
         }
         self.dbms.create_table(table_dict)
-        self.dbms.create_index("users", "email")
+        self.dbms.create_index("users", "idx_email", "email")
         
         # Insert records
         self.dbms.insert({"table_name": "users", "column_name_list": None}, [1, "alice@test.com"])
@@ -126,7 +125,7 @@ class TestDBMSIndexIntegration(unittest.TestCase):
             "foreign_key_dict": {}
         }
         self.dbms.create_table(table_dict)
-        self.dbms.create_index("inventory", "category")
+        self.dbms.create_index("inventory", "idx_category", "category")
         
         # Insert records
         self.dbms.insert({"table_name": "inventory", "column_name_list": None}, [1, "Electronics"])
@@ -160,7 +159,7 @@ class TestDBMSIndexIntegration(unittest.TestCase):
         self.dbms.insert({"table_name": "orders", "column_name_list": None}, [3, "pending"])
         
         # Create index on existing data
-        self.dbms.create_index("orders", "status")
+        self.dbms.create_index("orders", "idx_status", "status")
         
         # Verify index was populated
         index_manager = self.dbms._get_index_manager("orders")
@@ -179,12 +178,12 @@ class TestDBMSIndexIntegration(unittest.TestCase):
         self.dbms.create_table(table_dict)
         
         with self.assertRaises(NonExistingColumnDefError):
-            self.dbms.create_index("items", "nonexistent_column")
+            self.dbms.create_index("items", "idx_bad", "nonexistent_column")
     
     def test_create_index_on_nonexistent_table(self):
         """Test creating an index on a non-existent table raises error."""
         with self.assertRaises(NoSuchTable):
-            self.dbms.create_index("nonexistent_table", "column1")
+            self.dbms.create_index("nonexistent_table", "idx_col", "column1")
     
     def test_drop_table_cleans_up_index(self):
         """Test that dropping a table removes its index file."""
@@ -197,7 +196,7 @@ class TestDBMSIndexIntegration(unittest.TestCase):
         }
         self.dbms.create_table(table_dict)
         self.dbms.insert({"table_name": "temp_table", "column_name_list": None}, [1, "A"])
-        self.dbms.create_index("temp_table", "value")
+        self.dbms.create_index("temp_table", "idx_value", "value")
         
         # Verify index file exists
         index_file = self.test_db_dir / "temp_table_indexes.idx"
@@ -219,10 +218,10 @@ class TestDBMSIndexIntegration(unittest.TestCase):
             "foreign_key_dict": {}
         }
         self.dbms.create_table(table_dict)
-        self.dbms.create_index("test_dup", "col")
+        self.dbms.create_index("test_dup", "idx_col", "col")
         
-        with self.assertRaises(Exception) as ctx:
-            self.dbms.create_index("test_dup", "col")
+        with self.assertRaises(DuplicateIndexError) as ctx:
+            self.dbms.create_index("test_dup", "idx_col", "col")
         self.assertIn("already exists", str(ctx.exception))
     
     def test_drop_nonexistent_index_fails(self):
@@ -236,7 +235,7 @@ class TestDBMSIndexIntegration(unittest.TestCase):
         }
         self.dbms.create_table(table_dict)
         
-        with self.assertRaises(Exception) as ctx:
+        with self.assertRaises(NoSuchIndexError) as ctx:
             self.dbms.drop_index("test_drop", "nonexistent")
         self.assertIn("does not exist", str(ctx.exception))
     
@@ -253,7 +252,7 @@ class TestDBMSIndexIntegration(unittest.TestCase):
         self.dbms.create_table(table_dict)
         self.dbms.insert({"table_name": "persistent", "column_name_list": None}, [1, "red"])
         self.dbms.insert({"table_name": "persistent", "column_name_list": None}, [2, "blue"])
-        self.dbms.create_index("persistent", "tag")
+        self.dbms.create_index("persistent", "idx_tag", "tag")
         
         # Create new DBMS instance (simulates restart)
         dbms2 = DBMS()

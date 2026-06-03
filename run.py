@@ -18,7 +18,7 @@ def main():
         for query in query_list:
             try:
                 sql_transformer = SQLTransformer()
-                statement, table, record, tables, select_columns, where = parse_query(sql_parser, sql_transformer, query)
+                statement, table, record, tables, select_columns, where, index = parse_query(sql_parser, sql_transformer, query)
                 if statement == 'exit':
                     exit = True  # end program only when exit query is entered
                     break
@@ -57,6 +57,19 @@ def main():
                 elif statement == "update":
                     result = dbms.update(table["table_name"], table["set_columns"], where)
                     print(PROMPT + str(result))
+                elif statement == "create index":
+                    result = dbms.create_index(
+                        table["table_name"],
+                        index["index_name"],
+                        index["column_name"]
+                    )
+                    print(PROMPT + str(result))
+                elif statement == "drop index":
+                    result = dbms.drop_index(
+                        table["table_name"],
+                        index["index_name"]
+                    )
+                    print(PROMPT + str(result))
             except (SyntaxError, NoSuchTable, DuplicateColumnDefError, DuplicatePrimaryKeyDefError, 
                     ReferenceTypeError, ReferenceNonPrimaryKeyError, ReferenceColumnExistenceError, ReferenceTableExistenceError, 
                     NonExistingColumnDefError, TableExistenceError, CharLengthError, DropReferencedTableError, 
@@ -67,7 +80,8 @@ def main():
                     WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference,
                     UpdateColumnExistenceError, UpdateColumnNonNullableError, UpdateTypeMismatchError,
                     UpdatePrimaryKeyError, UpdateReferentialIntegrityError,
-                    ActiveTransactionError, NoActiveTransactionError, InvalidTransactionStateError) as e:
+                    ActiveTransactionError, NoActiveTransactionError, InvalidTransactionStateError,
+                    DuplicateIndexError, NoSuchIndexError, IndexExistenceError) as e:
                 print(PROMPT + str(e))
                 break
             
