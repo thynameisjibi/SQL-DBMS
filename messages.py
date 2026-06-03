@@ -38,6 +38,27 @@ class DeleteReferentialIntegrityPassed(SuccessLog):  # NOTE: optional
     def __init__(self, num_deleted):
         self.num_deleted = num_deleted
         super().__init__(f"'{self.num_deleted}' row(s) are not deleted due to referential integrity")
+
+
+class BeginSuccess(SuccessLog):
+    def __init__(self):
+        super().__init__("Transaction started")
+
+
+class CommitSuccess(SuccessLog):
+    def __init__(self):
+        super().__init__("Transaction committed")
+
+
+class RollbackSuccess(SuccessLog):
+    def __init__(self):
+        super().__init__("Transaction rolled back")
+
+
+class UpdateResult(SuccessLog):
+    def __init__(self, num_updated):
+        self.num_updated = num_updated
+        super().__init__(f"'{self.num_updated}' row(s) are updated")
         
 
 # ---------------------------------------------------------------------------- #
@@ -183,3 +204,19 @@ class WhereColumnNotExist(Exception):
 class WhereAmbiguousReference(Exception):
     def __init__(self):
         super().__init__(f"Where clause contains ambiguous reference")
+
+
+# ---------------------------------------------------------------------------- #
+#                       Transaction errors                                       #
+# ---------------------------------------------------------------------------- #
+
+class ActiveTransactionError(Exception):
+    """Raised when BEGIN is called while a transaction is already active."""
+    def __init__(self):
+        super().__init__("A transaction is already active")
+
+
+class NoActiveTransactionError(Exception):
+    """Raised when COMMIT or ROLLBACK is called without an active transaction."""
+    def __init__(self):
+        super().__init__("No active transaction")
