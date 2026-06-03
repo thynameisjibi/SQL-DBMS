@@ -5,6 +5,7 @@ from collections import Counter
 from copy import deepcopy
 
 from db_model import Table, Record, DB, MetaDB
+from index import IndexManager
 from utils import *
 from messages import *
 
@@ -12,9 +13,20 @@ from messages import *
 
 class DBMS:
     def __init__(self):
-        self.db_dir = Path("./DB")
-        self.db_dir.mkdir(exist_ok=True)
-        self.meta_db = MetaDB()
+        self._db_dir = Path("./DB")
+        self._db_dir.mkdir(exist_ok=True)
+        self.meta_db = MetaDB(db_dir=self._db_dir)
+        self.index_managers: Dict[str, IndexManager] = {}  # table_name -> IndexManager
+    
+    @property
+    def db_dir(self):
+        return self._db_dir
+    
+    @db_dir.setter
+    def db_dir(self, value):
+        self._db_dir = Path(value)
+        self._db_dir.mkdir(exist_ok=True)
+        self.meta_db = MetaDB(db_dir=self._db_dir)
         
         
     def create_table(self, table_dict: dict):
@@ -86,7 +98,7 @@ class DBMS:
         self.meta_db.close_db()
         
         # create table db
-        table_db = DB(table_name)
+        table_db = DB(table_name, self.db_dir)
         table_db.open_db()
         table_db.close_db()
         
@@ -112,8 +124,15 @@ class DBMS:
         self.meta_db.delete(table_key)
         
         # remove table records (delete all backend files, see DB.remove_files)
-        DB(table_name).remove_files()
+        DB(table_name, self.db_dir).remove_files()
         self.meta_db.close_db()
+        
+        # remove index files
+        index_manager = self.index_managers.pop(table_name, None)
+        if index_manager:
+            index_file = index_manager.index_file
+            if index_file.exists():
+                index_file.unlink()
         
         return DropSuccess(table_name)
     
@@ -181,7 +200,7 @@ class DBMS:
                 referenced_table = self.meta_db.get(referenced_table_key)
                 self.meta_db.close_db()
                 # get referenced record
-                referenced_table_db = DB(referenced_table_name)
+                referenced_table_db = DB(referenced_table_name, self.db_dir)
                 referenced_table_db.open_db()
                 referenced_key = referenced_table_db.create_key_from_value((value,))
                 referenced_record = None
@@ -204,13 +223,18 @@ class DBMS:
         primary_value = tuple(primary_value) if primary_value else None
         record = Record(table_name, data, primary_value, referencing)
         
-        table_db = DB(table_name)
+        table_db = DB(table_name, self.db_dir)
         table_db.open_db()
         record_key = table_db.create_key_from_value(primary_value) if primary_value else table_db.create_random_key()
         if table_db.exists(record_key):
             raise InsertDuplicatePrimaryKeyError()
         table_db.put(record_key, record)
         table_db.close_db()
+        
+        # Update indexes
+        index_manager = self._get_index_manager(table_name)
+        for column_name, value in data.items():
+            index_manager.insert(column_name, value, record_key)
         
         return InsertResult()
 
@@ -223,7 +247,7 @@ class DBMS:
             raise NoSuchTable()
         self.meta_db.close_db()
         
-        table_db = DB(table_name)
+        table_db = DB(table_name, self.db_dir)
         table_db.open_db()
         outer_cursor = table_db.create_cursor()
         
@@ -238,10 +262,15 @@ class DBMS:
                 if list(record.referenced_by.values()):
                     fail_cnt += 1
                 else:
+                    # Update indexes before deletion
+                    index_manager = self._get_index_manager(table_name)
+                    for column_name, value in record.data.items():
+                        index_manager.delete(column_name, value, key)
+                    
                     if record.referencing:
                         for (referenced_table_name, referenced_column_name), referenced_value_set in record.referencing.items():
                             for referenced_value in referenced_value_set:
-                                referenced_table_db = DB(referenced_table_name)
+                                referenced_table_db = DB(referenced_table_name, self.db_dir)
                                 referenced_table_db.open_db()
                                 inner_cursor = referenced_table_db.create_cursor()
                                 key_value_pair = inner_cursor.first()
@@ -265,6 +294,73 @@ class DBMS:
         
         return DeleteResult(success_cnt), DeleteReferentialIntegrityPassed(fail_cnt) if fail_cnt else None
         
+    
+    def _get_index_manager(self, table_name: str) -> IndexManager:
+        """Get or create IndexManager for a table."""
+        if table_name not in self.index_managers:
+            self.index_managers[table_name] = IndexManager(table_name, self.db_dir)
+        return self.index_managers[table_name]
+    
+    def create_index(self, table_name: str, column_name: str):
+        """Create an index on a table column."""
+        self.meta_db.open_db()
+        table_key = self.meta_db.create_key_from_value(table_name)
+        table = self.meta_db.get(table_key)
+        if not table:
+            self.meta_db.close_db()
+            raise NoSuchTable()
+        if column_name not in table.columns:
+            self.meta_db.close_db()
+            raise NonExistingColumnDefError(column_name)
+        self.meta_db.close_db()
+        
+        index_manager = self._get_index_manager(table_name)
+        if not index_manager.create_index(column_name):
+            raise Exception("Index already exists")
+        
+        # Rebuild index from existing data
+        table_db = DB(table_name, self.db_dir)
+        table_db.open_db()
+        records = []
+        cursor = table_db.create_cursor()
+        key_value_pair = cursor.first()
+        while key_value_pair:
+            key, value = key_value_pair
+            record = Record.deserialize(value)
+            if column_name in record.data:
+                records.append((record.data[column_name], key))
+            key_value_pair = cursor.next()
+        table_db.discard_cursor(cursor)
+        table_db.close_db()
+        
+        index_manager.rebuild_index(column_name, records)
+        
+        # Update table metadata to mark column as indexed
+        self.meta_db.open_db()
+        table = self.meta_db.get(table_key)
+        if table:
+            table.add_index(column_name)
+            self.meta_db.put(table_key, table)
+        self.meta_db.close_db()
+        
+        return f"Index created on {table_name}.{column_name}"
+    
+    def drop_index(self, table_name: str, column_name: str):
+        """Drop an index from a table column."""
+        index_manager = self._get_index_manager(table_name)
+        if not index_manager.drop_index(column_name):
+            raise Exception("Index does not exist")
+        
+        # Update table metadata to unmark column as indexed
+        self.meta_db.open_db()
+        table_key = self.meta_db.create_key_from_value(table_name)
+        table = self.meta_db.get(table_key)
+        if table:
+            table.remove_index(column_name)
+            self.meta_db.put(table_key, table)
+        self.meta_db.close_db()
+        
+        return f"Index dropped on {table_name}.{column_name}"
     
     def _evaluate_condition(self, condition, table_list: List[Table], record: dict):
         def get_record_value(operand):
@@ -370,7 +466,7 @@ class DBMS:
         all_records_with_table = {}
         for table_name in tables:
             all_records_with_table[table_name] = []
-            table_db = DB(table_name)
+            table_db = DB(table_name, self.db_dir)
             table_db.open_db()
             cursor = table_db.create_cursor()
             key_value_pair = cursor.first()
