@@ -13,10 +13,20 @@ from messages import *
 
 class DBMS:
     def __init__(self):
-        self.db_dir = Path("./DB")
-        self.db_dir.mkdir(exist_ok=True)
-        self.meta_db = MetaDB()
+        self._db_dir = Path("./DB")
+        self._db_dir.mkdir(exist_ok=True)
+        self.meta_db = MetaDB(db_dir=self._db_dir)
         self.index_managers: Dict[str, IndexManager] = {}  # table_name -> IndexManager
+    
+    @property
+    def db_dir(self):
+        return self._db_dir
+    
+    @db_dir.setter
+    def db_dir(self, value):
+        self._db_dir = Path(value)
+        self._db_dir.mkdir(exist_ok=True)
+        self.meta_db = MetaDB(db_dir=self._db_dir)
         
         
     def create_table(self, table_dict: dict):
@@ -88,7 +98,7 @@ class DBMS:
         self.meta_db.close_db()
         
         # create table db
-        table_db = DB(table_name)
+        table_db = DB(table_name, self.db_dir)
         table_db.open_db()
         table_db.close_db()
         
@@ -114,7 +124,7 @@ class DBMS:
         self.meta_db.delete(table_key)
         
         # remove table records (delete all backend files, see DB.remove_files)
-        DB(table_name).remove_files()
+        DB(table_name, self.db_dir).remove_files()
         self.meta_db.close_db()
         
         # remove index files
@@ -193,7 +203,7 @@ class DBMS:
                 referenced_table = self.meta_db.get(referenced_table_key)
                 self.meta_db.close_db()
                 # get referenced record
-                referenced_table_db = DB(referenced_table_name)
+                referenced_table_db = DB(referenced_table_name, self.db_dir)
                 referenced_table_db.open_db()
                 referenced_key = referenced_table_db.create_key_from_value((value,))
                 referenced_record = None
@@ -216,7 +226,7 @@ class DBMS:
         primary_value = tuple(primary_value) if primary_value else None
         record = Record(table_name, data, primary_value, referencing)
         
-        table_db = DB(table_name)
+        table_db = DB(table_name, self.db_dir)
         table_db.open_db()
         record_key = table_db.create_key_from_value(primary_value) if primary_value else table_db.create_random_key()
         if table_db.exists(record_key):
@@ -240,7 +250,7 @@ class DBMS:
             raise NoSuchTable()
         self.meta_db.close_db()
         
-        table_db = DB(table_name)
+        table_db = DB(table_name, self.db_dir)
         table_db.open_db()
         outer_cursor = table_db.create_cursor()
         
@@ -263,7 +273,7 @@ class DBMS:
                     if record.referencing:
                         for (referenced_table_name, referenced_column_name), referenced_value_set in record.referencing.items():
                             for referenced_value in referenced_value_set:
-                                referenced_table_db = DB(referenced_table_name)
+                                referenced_table_db = DB(referenced_table_name, self.db_dir)
                                 referenced_table_db.open_db()
                                 inner_cursor = referenced_table_db.create_cursor()
                                 key_value_pair = inner_cursor.first()
@@ -300,8 +310,10 @@ class DBMS:
         table_key = self.meta_db.create_key_from_value(table_name)
         table = self.meta_db.get(table_key)
         if not table:
+            self.meta_db.close_db()
             raise NoSuchTable()
         if column_name not in table.columns:
+            self.meta_db.close_db()
             raise NonExistingColumnDefError(column_name)
         self.meta_db.close_db()
         
@@ -310,7 +322,7 @@ class DBMS:
             raise Exception("Index already exists")
         
         # Rebuild index from existing data
-        table_db = DB(table_name)
+        table_db = DB(table_name, self.db_dir)
         table_db.open_db()
         records = []
         cursor = table_db.create_cursor()
@@ -457,7 +469,7 @@ class DBMS:
         all_records_with_table = {}
         for table_name in tables:
             all_records_with_table[table_name] = []
-            table_db = DB(table_name)
+            table_db = DB(table_name, self.db_dir)
             table_db.open_db()
             cursor = table_db.create_cursor()
             key_value_pair = cursor.first()

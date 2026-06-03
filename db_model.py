@@ -189,8 +189,8 @@ class Cursor:
 
 class DB:
     """One database, One table"""
-    def __init__(self, db_name: str):
-        self.db_dir = Path("./DB")
+    def __init__(self, db_name: str, db_dir: Path = None):
+        self.db_dir = db_dir or Path("./DB")
         self.db_dir.mkdir(exist_ok=True)
         self.db_name = db_name
         self.db_file = self.db_dir / (self.db_name + ".db")
@@ -276,8 +276,8 @@ class DB:
 
 class MetaDB(DB):
     """Metadata DB containing table schemas"""
-    def __init__(self, db_name="table"):  # identifier
-        super().__init__(db_name)
+    def __init__(self, db_name="table", db_dir: Path = None):  # identifier
+        super().__init__(db_name, db_dir)
     
     def get(self, key):
         if key not in self.DB:
