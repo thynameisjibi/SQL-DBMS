@@ -93,6 +93,12 @@ class IndexManager:
             return self.indexes[column_name].search(value)
         return set()
     
+    def range_search(self, column_name: str, low: Any, high: Any) -> Set[bytes]:
+        """Range search a specific column index if it exists. O(n) for hash indexes."""
+        if column_name in self.indexes:
+            return self.indexes[column_name].range_search(low, high)
+        return set()
+    
     def save_indexes(self):
         """Persist indexes to disk using pickle."""
         self.db_dir.mkdir(exist_ok=True)
