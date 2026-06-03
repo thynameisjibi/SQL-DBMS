@@ -28,7 +28,8 @@ class Table(DataObject):
         primary_key: Tuple[str], 
         foreign_keys: Dict[str, Tuple[str, str]],
         referenced_by: Set[str]=set(),
-        indexed_columns: Set[str]=None  # NEW: track indexed columns
+        indexed_columns: Set[str]=None,  # track indexed columns
+        index_definitions: Dict[str, str]=None  # NEW: index_name -> column_name
     ):
         self.table_name = table_name
         self.columns = columns  # key: column name, value: column referencing_type
@@ -37,6 +38,7 @@ class Table(DataObject):
         self.foreign_keys = foreign_keys  # key: referencing column name, value: tuple of (referenced table name, referenced column name)
         self.referenced_by = referenced_by  # set of table names that reference this table
         self.indexed_columns = indexed_columns or set()  # set of column names with indexes
+        self.index_definitions = index_definitions or {}
         
     def __str__(self):
         info = "\n-----------------------------------------------------------------\n"
@@ -51,6 +53,11 @@ class Table(DataObject):
                 key_str = 'FOR'
                 if self.primary_key and column in self.primary_key:
                     key_str = 'PRI/FOR'
+            if self.indexed_columns and column in self.indexed_columns:
+                if key_str:
+                    key_str += '/IDX'
+                else:
+                    key_str = 'IDX'
             info += "{:<25}{:<15}{:<10}{:<10}\n".format(column, column_type, null_str, key_str)
         info += "-----------------------------------------------------------------"
         return info
@@ -89,6 +96,25 @@ class Table(DataObject):
     def is_indexed(self, column_name: str) -> bool:
         """Check if column has an index."""
         return column_name in self.indexed_columns
+    
+    def add_index_definition(self, index_name: str, column_name: str):
+        """Add named index definition and mark column as indexed."""
+        self.index_definitions[index_name] = column_name
+        self.indexed_columns.add(column_name)
+    
+    def remove_index_definition(self, index_name: str):
+        """Remove named index definition and unmark column if no other index uses it."""
+        column_name = self.index_definitions.pop(index_name, None)
+        if column_name and column_name not in self.index_definitions.values():
+            self.indexed_columns.discard(column_name)
+    
+    def get_index_column(self, index_name: str):
+        """Get the column name for a given index name."""
+        return self.index_definitions.get(index_name)
+    
+    def has_index_name(self, index_name: str) -> bool:
+        """Check if an index with the given name exists."""
+        return index_name in self.index_definitions
     
 '''
 table = TableSchema(
