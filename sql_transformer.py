@@ -245,7 +245,17 @@ class SQLTransformer(Transformer):
         else:
             return "is", None
     
-    # not for project 1-2, 1-3
     def update_query(self, items):
         self.statement = items[0].lower()
-        return "'UPDATE' requested"
+        self.table = {
+            "table_name": items[1],
+            "assignments": items[3]
+        }
+        self.where = items[4] if len(items) > 4 else None
+        return items
+
+    def assignment_list(self, items):
+        return [item for item in items if item != ',']
+
+    def assignment(self, items):
+        return (items[0], items[2])  # (column_name, value)

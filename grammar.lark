@@ -149,5 +149,6 @@ null_operation : IS [NOT] NULL
 show_tables_query : SHOW TABLES
 
 // UPDATE
-update_query : UPDATE table_name SET assignment [where_clause]
+update_query : UPDATE table_name SET assignment_list [where_clause]
+assignment_list : assignment ("," assignment)*
 assignment : column_name EQUAL value

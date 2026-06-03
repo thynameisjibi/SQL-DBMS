@@ -16,3 +16,5 @@ tmp.benchmarks/
 *.map
 *.log
 .DS_Store
+DB_TEST_UPDATE_*/
+DB/

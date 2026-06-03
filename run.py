@@ -45,13 +45,18 @@ def main():
                 elif statement == "select":
                     output = dbms.select(tables, select_columns, where)
                     print(PROMPT + output)
+                elif statement == "update":
+                    result = dbms.update(table["table_name"], table["assignments"], where)
+                    print(PROMPT + str(result))
             except (SyntaxError, NoSuchTable, DuplicateColumnDefError, DuplicatePrimaryKeyDefError, 
                     ReferenceTypeError, ReferenceNonPrimaryKeyError, ReferenceColumnExistenceError, ReferenceTableExistenceError, 
                     NonExistingColumnDefError, TableExistenceError, CharLengthError, DropReferencedTableError, 
                     InsertTypeMismatchError, InsertColumnExistenceError, InsertColumnNonNullableError,
                     InsertDuplicatePrimaryKeyError, InsertReferentialIntegrityError,
                     SelectTableExistenceError, SelectColumnResolveError, 
-                    WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference) as e:
+                    WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference,
+                    UpdateColumnExistenceError, UpdateColumnNonNullableError, UpdateTypeMismatchError,
+                    UpdatePrimaryKeyError, UpdateReferentialIntegrityError) as e:
                 print(PROMPT + str(e))
                 break
             
