@@ -32,8 +32,10 @@ def dbms():
     })
     yield dbms
     # Cleanup
+    import gc
+    gc.collect()
     if db_dir.exists():
-        shutil.rmtree(db_dir)
+        shutil.rmtree(db_dir, ignore_errors=True)
 
 
 class TestInsertValidCases:

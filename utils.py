@@ -72,12 +72,12 @@ def is_valid_type(valid_type, value):
         elif valid_type == "date":
             if not isinstance(value, str):
                 return False
-            match = re.match(DATE_PATTERN, value)
+            match = re.fullmatch(DATE_PATTERN, value)
             if not match:
                 return False
             year, month, day = int(match.group(1)), int(match.group(2)), int(match.group(3))
             return 1 <= month <= 12 and 1 <= day <= 31
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, SyntaxError, NameError):
         return False
     
     return False
