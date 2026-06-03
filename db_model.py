@@ -27,7 +27,8 @@ class Table(DataObject):
         not_null_keys: Set[str], 
         primary_key: Tuple[str], 
         foreign_keys: Dict[str, Tuple[str, str]],
-        referenced_by: Set[str]=set()
+        referenced_by: Set[str]=set(),
+        indexed_columns: Set[str]=None  # NEW: track indexed columns
     ):
         self.table_name = table_name
         self.columns = columns  # key: column name, value: column referencing_type
@@ -35,6 +36,7 @@ class Table(DataObject):
         self.primary_key = primary_key  # tuple of column names (order is important in this project)
         self.foreign_keys = foreign_keys  # key: referencing column name, value: tuple of (referenced table name, referenced column name)
         self.referenced_by = referenced_by  # set of table names that reference this table
+        self.indexed_columns = indexed_columns or set()  # set of column names with indexes
         
     def __str__(self):
         info = "\n-----------------------------------------------------------------\n"
@@ -75,6 +77,18 @@ class Table(DataObject):
         
     def remove_reference(self, table_name):
         self.referenced_by.remove(table_name)
+    
+    def add_index(self, column_name: str):
+        """Mark column as indexed."""
+        self.indexed_columns.add(column_name)
+    
+    def remove_index(self, column_name: str):
+        """Mark column as not indexed."""
+        self.indexed_columns.discard(column_name)
+    
+    def is_indexed(self, column_name: str) -> bool:
+        """Check if column has an index."""
+        return column_name in self.indexed_columns
     
 '''
 table = TableSchema(

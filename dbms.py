@@ -325,6 +325,15 @@ class DBMS:
         table_db.close_db()
         
         index_manager.rebuild_index(column_name, records)
+        
+        # Update table metadata to mark column as indexed
+        self.meta_db.open_db()
+        table = self.meta_db.get(table_key)
+        if table:
+            table.add_index(column_name)
+            self.meta_db.put(table_key, table)
+        self.meta_db.close_db()
+        
         return f"Index created on {table_name}.{column_name}"
     
     def drop_index(self, table_name: str, column_name: str):
@@ -332,6 +341,16 @@ class DBMS:
         index_manager = self._get_index_manager(table_name)
         if not index_manager.drop_index(column_name):
             raise Exception("Index does not exist")
+        
+        # Update table metadata to unmark column as indexed
+        self.meta_db.open_db()
+        table_key = self.meta_db.create_key_from_value(table_name)
+        table = self.meta_db.get(table_key)
+        if table:
+            table.remove_index(column_name)
+            self.meta_db.put(table_key, table)
+        self.meta_db.close_db()
+        
         return f"Index dropped on {table_name}.{column_name}"
     
     def _evaluate_condition(self, condition, table_list: List[Table], record: dict):
