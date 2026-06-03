@@ -18,12 +18,17 @@ class SQLTransformer(Transformer):
         self.tables = list()
         self.select_columns = list()  # [(table_name, column_name), ...)] or '*
         self.where = dict()  # [(table_name, column_name, operator, value), ...] up to 4 conditions
+        self.index = {
+            "index_name": str(),
+            "table_name": str(),
+            "column_name": str(),
+        }
         
     # assumes the parse tree transforms only one query at a time
     def command(self, items):
         if items[0] == "exit":
             self.statement = items[0]
-        return self.statement, self.table, self.record, self.tables, self.select_columns, self.where
+        return self.statement, self.table, self.record, self.tables, self.select_columns, self.where, self.index
     
     def query_list(self, items):
         return items[0]
@@ -81,6 +86,26 @@ class SQLTransformer(Transformer):
             "table_name": items[2]
         }
         return items
+    
+    def create_index_query(self, items):
+        # items: [CREATE, INDEX, index_name, ON, table_name, '(', column_name, ')']
+        self.statement = "create index"
+        self.index["index_name"] = items[2]
+        self.index["table_name"] = items[4]
+        self.index["column_name"] = items[6]
+        self.table = {"table_name": items[4]}
+        return items
+    
+    def drop_index_query(self, items):
+        # items: [DROP, INDEX, index_name, ON, table_name]
+        self.statement = "drop index"
+        self.index["index_name"] = items[2]
+        self.index["table_name"] = items[4]
+        self.table = {"table_name": items[4]}
+        return items
+    
+    def index_name(self, items) -> str:
+        return items[0].value.lower()
 
     def explain_query(self, items):
         self.statement = items[0].lower()

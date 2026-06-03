@@ -14,7 +14,7 @@ SQ : "'"
 // Tokens
 STR : DQ _STRING_ESC_INNER DQ | SQ _STRING_ESC_INNER SQ
 DATE.9 : N N N N "-" N N "-" N N
-IDENTIFIER : C (C | "_")*
+IDENTIFIER : C (C | "_" | N)*
 
 // Keywords
 TABLE : "table"i
@@ -61,6 +61,8 @@ SHOW : "show"i
 
 UPDATE : "update"i
 SET : "set"i
+INDEX : "index"i
+ON    : "on"i
 
 BEGIN : "begin"i
 COMMIT : "commit"i
@@ -74,6 +76,8 @@ command : query_list | EXIT ";"  // exit is evaluated at the command level
 query_list : (query ";")+
 query : create_table_query
       | drop_table_query
+      | create_index_query
+      | drop_index_query
       | explain_query
       | describe_query
       | desc_query
@@ -108,6 +112,14 @@ column_name : IDENTIFIER
 
 // DROP TABLE
 drop_table_query : DROP TABLE table_name
+
+// CREATE INDEX
+create_index_query : CREATE INDEX index_name ON table_name LP column_name RP
+
+// DROP INDEX
+drop_index_query : DROP INDEX index_name ON table_name
+
+index_name : IDENTIFIER
 
 // EXPLAIN
 explain_query : EXPLAIN table_name
