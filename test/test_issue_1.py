@@ -210,3 +210,79 @@ class TestUpdateTransformer:
         assert transformer.statement == "update"
         assert len(transformer.table["set_columns"]) == 2
         assert transformer.where is None
+
+
+# --------------------------------------------------------------------------- #
+#                         Adversarial / Edge Case Tests                     #
+# --------------------------------------------------------------------------- #
+
+class TestAdversarialEdgeCases:
+    """Hostile QA: try to break the parser and transformer."""
+
+    def test_update_with_null_value(self, sql_parser):
+        query = "UPDATE account SET branch_name = NULL WHERE account_number = 9732;"
+        transformer = SQLTransformer()
+        parsed = sql_parser.parse(query)
+        transformer.transform(parsed)
+        assert transformer.table["set_columns"][0] == ("branch_name", None)
+
+    def test_update_with_date_value(self, sql_parser):
+        query = "UPDATE account SET opened = 2023-01-15 WHERE account_number = 9732;"
+        transformer = SQLTransformer()
+        parsed = sql_parser.parse(query)
+        transformer.transform(parsed)
+        assert transformer.table["set_columns"][0] == ("opened", "2023-01-15")
+
+    def test_update_with_special_chars_in_string(self, sql_parser):
+        query = "UPDATE account SET branch_name = 'Downtown, Main St.' WHERE account_number = 9732;"
+        transformer = SQLTransformer()
+        parsed = sql_parser.parse(query)
+        transformer.transform(parsed)
+        assert transformer.table["set_columns"][0] == ("branch_name", "Downtown, Main St.")
+
+    def test_update_with_many_assignments(self, sql_parser):
+        query = "UPDATE t SET a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8, i = 9, j = 10;"
+        transformer = SQLTransformer()
+        parsed = sql_parser.parse(query)
+        transformer.transform(parsed)
+        assert len(transformer.table["set_columns"]) == 10
+        assert transformer.where is None
+
+    def test_update_with_negative_int(self, sql_parser):
+        query = "UPDATE account SET balance = -500 WHERE account_number = 9732;"
+        transformer = SQLTransformer()
+        parsed = sql_parser.parse(query)
+        transformer.transform(parsed)
+        assert transformer.table["set_columns"][0] == ("balance", "-500")
+
+    def test_update_with_quoted_keyword_value(self, sql_parser):
+        query = "UPDATE account SET status = 'select' WHERE account_number = 9732;"
+        transformer = SQLTransformer()
+        parsed = sql_parser.parse(query)
+        transformer.transform(parsed)
+        assert transformer.table["set_columns"][0] == ("status", "select")
+
+    def test_update_with_or_where(self, sql_parser):
+        query = "UPDATE account SET balance = 0 WHERE account_number = 1 OR account_number = 2;"
+        transformer = SQLTransformer()
+        parsed = sql_parser.parse(query)
+        transformer.transform(parsed)
+        assert len(transformer.table["set_columns"]) == 1
+        assert transformer.where is not None
+
+    def test_update_with_null_where(self, sql_parser):
+        query = "UPDATE account SET balance = 0 WHERE branch_name IS NULL;"
+        transformer = SQLTransformer()
+        parsed = sql_parser.parse(query)
+        transformer.transform(parsed)
+        assert transformer.where is not None
+
+    def test_exception_messages_are_informative(self):
+        assert "date" in str(InsertDateFormatException()).lower()
+        assert "char" in str(InsertCharLengthExceeded("col", 10)).lower()
+        assert "referential" in str(UpdateReferentialIntegrityError()).lower()
+        assert "type" in str(UpdateTypeMismatchError()).lower()
+        assert "3" in str(UpdateResult(3))
+        assert "active" in str(ActiveTransactionError()).lower()
+        assert "no active" in str(NoActiveTransactionError()).lower()
+        assert "invalid" in str(InvalidTransactionStateError()).lower()
