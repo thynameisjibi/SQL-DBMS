@@ -8,6 +8,7 @@ import sys
 import os
 import unittest
 from pathlib import Path
+from uuid import uuid4
 
 from lark import Lark
 
@@ -17,31 +18,53 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dbms import DBMS
 from sql_transformer import SQLTransformer
 from messages import *
+import db_model
 
 
 class UpdateTestBase(unittest.TestCase):
     """Base class for UPDATE tests with common setup/teardown."""
 
-    DB_DIR = Path("./DB_TEST_UPDATE")
-
     @classmethod
     def setUpClass(cls):
-        # Point DBMS to test directory
-        DBMS.db_dir = cls.DB_DIR
         with open('grammar.lark') as file:
             cls.sql_parser = Lark(file.read(), start="command", lexer="basic")
 
     def setUp(self):
-        # Clean and create fresh DB directory
-        if self.DB_DIR.exists():
-            shutil.rmtree(self.DB_DIR)
-        self.DB_DIR.mkdir(exist_ok=True)
+        # Use a unique DB directory per test to avoid Windows file-locking issues
+        self.db_dir = Path(f"./DB_TEST_UPDATE_{uuid4().hex[:8]}")
+        self.db_dir.mkdir(exist_ok=True)
+        
+        # Monkey-patch db_model.DB to use our test directory
+        db_model.DB.db_dir = self.db_dir
+        original_db_init = db_model.DB.__init__
+        def patched_init(self, db_name):
+            self.db_dir = db_model.DB.db_dir
+            self.db_dir.mkdir(exist_ok=True)
+            self.db_name = db_name
+            self.db_file = self.db_dir / (self.db_name + ".db")
+            self.DB = None
+        db_model.DB.__init__ = patched_init
+        self._original_db_init = original_db_init
+        
         self.dbms = DBMS()
-        self.dbms.db_dir = self.DB_DIR
+        self.dbms.db_dir = self.db_dir
+        self.dbms.meta_db.db_dir = self.db_dir
+        self.dbms.meta_db.db_file = self.db_dir / (self.dbms.meta_db.db_name + ".db")
 
     def tearDown(self):
-        if self.DB_DIR.exists():
-            shutil.rmtree(self.DB_DIR)
+        # Close any open DB handles before cleanup (Windows locks files)
+        try:
+            self.dbms.meta_db.close_db()
+        except Exception:
+            pass
+        # Restore original DB init
+        db_model.DB.__init__ = self._original_db_init
+        if self.db_dir.exists():
+            shutil.rmtree(self.db_dir, ignore_errors=True)
+        # Also clean the default DB dir since DBMS.__init__ hardcodes it
+        default_db = Path("./DB")
+        if default_db.exists():
+            shutil.rmtree(default_db, ignore_errors=True)
 
     def parse_and_transform(self, query: str):
         """Parse a single SQL query and return transformed results."""
@@ -52,6 +75,14 @@ class UpdateTestBase(unittest.TestCase):
 
     def create_test_tables(self):
         """Create standard test tables used across multiple tests."""
+        # Table: department(dept_name PK) - must be created first since students references it
+        self.dbms.create_table({
+            "table_name": "department",
+            "column_list": [("dept_name", "char(20)"), ("building", "char(20)"), ("budget", "int")],
+            "not_null_key_set": {"dept_name"},
+            "primary_key_list": [("dept_name",)],
+            "foreign_key_dict": {}
+        })
         # Table: students(id PK, name NOT NULL, dept_name NOT NULL FK->department)
         self.dbms.create_table({
             "table_name": "students",
@@ -59,14 +90,6 @@ class UpdateTestBase(unittest.TestCase):
             "not_null_key_set": {"id", "name", "dept_name"},
             "primary_key_list": [("id",)],
             "foreign_key_dict": {"dept_name": ("department", "dept_name")}
-        })
-        # Table: department(dept_name PK)
-        self.dbms.create_table({
-            "table_name": "department",
-            "column_list": [("dept_name", "char(20)"), ("building", "char(20)"), ("budget", "int")],
-            "not_null_key_set": {"dept_name"},
-            "primary_key_list": [("dept_name",)],
-            "foreign_key_dict": {}
         })
         # Insert parent rows first
         self.dbms.insert({"table_name": "department", "column_name_list": None},
@@ -179,10 +202,10 @@ class TestUpdateConstraints(UpdateTestBase):
         with self.assertRaises(UpdateColumnNonNullableError):
             self.dbms.update("students", [("name", None)], None)
 
-    def test_update_duplicate_primary_key(self):
-        """Updating PK to an existing value should raise UpdateDuplicatePrimaryKeyError."""
+    def test_update_primary_key_duplicate(self):
+        """Updating PK to an existing value should raise UpdatePrimaryKeyError."""
         self.create_test_tables()
-        with self.assertRaises(UpdateDuplicatePrimaryKeyError):
+        with self.assertRaises(UpdatePrimaryKeyError):
             self.dbms.update("students", [("id", "S002")], None)
 
     def test_update_referential_integrity(self):
