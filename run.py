@@ -55,7 +55,7 @@ def main():
                     result = dbms.rollback()
                     print(PROMPT + str(result))
                 elif statement == "update":
-                    result = dbms.update(table["table_name"], record, where)
+                    result = dbms.update(table["table_name"], table["set_columns"], where)
                     print(PROMPT + str(result))
             except (SyntaxError, NoSuchTable, DuplicateColumnDefError, DuplicatePrimaryKeyDefError, 
                     ReferenceTypeError, ReferenceNonPrimaryKeyError, ReferenceColumnExistenceError, ReferenceTableExistenceError, 
@@ -65,6 +65,8 @@ def main():
                     UpdateReferentialIntegrityError, UpdateTypeMismatchError,
                     SelectTableExistenceError, SelectColumnResolveError, 
                     WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference,
+                    UpdateColumnExistenceError, UpdateColumnNonNullableError, UpdateTypeMismatchError,
+                    UpdatePrimaryKeyError, UpdateReferentialIntegrityError,
                     ActiveTransactionError, NoActiveTransactionError, InvalidTransactionStateError) as e:
                 print(PROMPT + str(e))
                 break

@@ -249,13 +249,13 @@ class SQLTransformer(Transformer):
         self.statement = items[0].lower()
         table_name = items[1]
         # items[2] is Token('SET', 'SET')
-        # Collect assignments (dicts from assignment()) and optional where_clause (dict)
+        # Collect assignments (tuples from assignment()) and optional where_clause (dict)
         set_columns = []
         where_clause = None
         for item in items[3:]:
             if item is None:
                 where_clause = None
-            elif isinstance(item, dict) and "column_name" in item:
+            elif isinstance(item, tuple) and len(item) == 2:
                 set_columns.append(item)
             elif isinstance(item, dict):
                 where_clause = item
@@ -263,15 +263,12 @@ class SQLTransformer(Transformer):
             "table_name": table_name,
             "set_columns": set_columns
         }
-        self.record = set_columns[0] if set_columns else None
+        self.record = {"column_name": set_columns[0][0], "value": set_columns[0][1]} if set_columns else None
         self.where = where_clause
         return items
     
     def assignment(self, items):
-        return {
-            "column_name": items[0],
-            "value": items[2]
-        }
+        return (items[0], items[2])
     
     def begin_query(self, items):
         self.statement = "begin"

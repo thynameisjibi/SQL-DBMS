@@ -270,7 +270,7 @@ class TestTransactionEdgeCases:
     def test_update_no_match(self, sample_table):
         """Update with WHERE that matches nothing — should not crash."""
         sample_table.begin()
-        result = sample_table.update("account", {"column_name": "name", "value": "Nobody"},
+        result = sample_table.update("account", [("name", "Nobody")],
                                      {"op": "=", "left_operand": (None, "id"), "right_operand": (999,)})
         assert "0" in str(result)  # 0 rows updated
         sample_table.commit()
@@ -342,7 +342,7 @@ class TestTransactionStateManipulation:
 
     def test_update_without_begin_is_auto_commit(self, sample_table):
         """Update without transaction persists immediately."""
-        sample_table.update("account", {"column_name": "name", "value": "Changed"}, None)
+        sample_table.update("account", [("name", "Changed")], None)
         assert sample_table.auto_commit is True
 
         table_db = DB("account")

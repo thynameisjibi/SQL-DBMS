@@ -16,3 +16,7 @@ tmp.benchmarks/
 *.map
 *.log
 .DS_Store
+DB_TEST_UPDATE_*/
+DB/
+DB_ADV_UPDATE_*/
+pr-body.txt

@@ -53,8 +53,6 @@ class CommitSuccess(SuccessLog):
 class RollbackSuccess(SuccessLog):
     def __init__(self):
         super().__init__("Transaction rolled back")
-
-
 class UpdateResult(SuccessLog):
     def __init__(self, num_updated):
         self.num_updated = num_updated
@@ -197,13 +195,6 @@ class UpdateTypeMismatchError(Exception):
         super().__init__("Update has failed: Types are not matched")
         
         
-class UpdateResult(SuccessLog):
-    """Success message with row count for UPDATE operations."""
-    def __init__(self, row_count):
-        self.row_count = row_count
-        super().__init__(f"'{self.row_count}' row(s) are updated")
-        
-        
 class ActiveTransactionError(Exception):
     """Raised when attempting nested BEGIN."""
     def __init__(self):
@@ -257,17 +248,15 @@ class WhereAmbiguousReference(Exception):
         super().__init__(f"Where clause contains ambiguous reference")
 
 
-# ---------------------------------------------------------------------------- #
-#                       Transaction errors                                       #
-# ---------------------------------------------------------------------------- #
-
-class ActiveTransactionError(Exception):
-    """Raised when BEGIN is called while a transaction is already active."""
-    def __init__(self):
-        super().__init__("A transaction is already active")
+class UpdateColumnExistenceError(Exception):
+    """Raised when the column does not exist in the table."""
+    def __init__(self, column_name):
+        self.column_name = column_name
+        super().__init__(f"Update has failed: '{self.column_name}' does not exist")
 
 
-class NoActiveTransactionError(Exception):
-    """Raised when COMMIT or ROLLBACK is called without an active transaction."""
-    def __init__(self):
-        super().__init__("No active transaction")
+class UpdateColumnNonNullableError(Exception):
+    """Raised when the column is non nullable and the value is null."""
+    def __init__(self, column_name):
+        self.column_name = column_name
+        super().__init__(f"Update has failed: '{self.column_name}' is not nullable")
