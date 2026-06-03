@@ -5,6 +5,7 @@ from collections import Counter
 from copy import deepcopy
 
 from db_model import Table, Record, DB, MetaDB
+from index import IndexManager
 from utils import *
 from messages import *
 
@@ -15,6 +16,7 @@ class DBMS:
         self.db_dir = Path("./DB")
         self.db_dir.mkdir(exist_ok=True)
         self.meta_db = MetaDB()
+        self.index_managers: Dict[str, IndexManager] = {}  # table_name -> IndexManager
         
         
     def create_table(self, table_dict: dict):
@@ -114,6 +116,13 @@ class DBMS:
         # remove table records (delete all backend files, see DB.remove_files)
         DB(table_name).remove_files()
         self.meta_db.close_db()
+        
+        # remove index files
+        index_manager = self.index_managers.pop(table_name, None)
+        if index_manager:
+            index_file = index_manager.index_file
+            if index_file.exists():
+                index_file.unlink()
         
         return DropSuccess(table_name)
     
@@ -215,6 +224,11 @@ class DBMS:
         table_db.put(record_key, record)
         table_db.close_db()
         
+        # Update indexes
+        index_manager = self._get_index_manager(table_name)
+        for column_name, value in data.items():
+            index_manager.insert(column_name, value, record_key)
+        
         return InsertResult()
 
     
@@ -241,6 +255,11 @@ class DBMS:
                 if list(record.referenced_by.values()):
                     fail_cnt += 1
                 else:
+                    # Update indexes before deletion
+                    index_manager = self._get_index_manager(table_name)
+                    for column_name, value in record.data.items():
+                        index_manager.delete(column_name, value, key)
+                    
                     if record.referencing:
                         for (referenced_table_name, referenced_column_name), referenced_value_set in record.referencing.items():
                             for referenced_value in referenced_value_set:
@@ -268,6 +287,52 @@ class DBMS:
         
         return DeleteResult(success_cnt), DeleteReferentialIntegrityPassed(fail_cnt) if fail_cnt else None
         
+    
+    def _get_index_manager(self, table_name: str) -> IndexManager:
+        """Get or create IndexManager for a table."""
+        if table_name not in self.index_managers:
+            self.index_managers[table_name] = IndexManager(table_name, self.db_dir)
+        return self.index_managers[table_name]
+    
+    def create_index(self, table_name: str, column_name: str):
+        """Create an index on a table column."""
+        self.meta_db.open_db()
+        table_key = self.meta_db.create_key_from_value(table_name)
+        table = self.meta_db.get(table_key)
+        if not table:
+            raise NoSuchTable()
+        if column_name not in table.columns:
+            raise NonExistingColumnDefError(column_name)
+        self.meta_db.close_db()
+        
+        index_manager = self._get_index_manager(table_name)
+        if not index_manager.create_index(column_name):
+            raise Exception("Index already exists")
+        
+        # Rebuild index from existing data
+        table_db = DB(table_name)
+        table_db.open_db()
+        records = []
+        cursor = table_db.create_cursor()
+        key_value_pair = cursor.first()
+        while key_value_pair:
+            key, value = key_value_pair
+            record = Record.deserialize(value)
+            if column_name in record.data:
+                records.append((record.data[column_name], key))
+            key_value_pair = cursor.next()
+        table_db.discard_cursor(cursor)
+        table_db.close_db()
+        
+        index_manager.rebuild_index(column_name, records)
+        return f"Index created on {table_name}.{column_name}"
+    
+    def drop_index(self, table_name: str, column_name: str):
+        """Drop an index from a table column."""
+        index_manager = self._get_index_manager(table_name)
+        if not index_manager.drop_index(column_name):
+            raise Exception("Index does not exist")
+        return f"Index dropped on {table_name}.{column_name}"
     
     def _evaluate_condition(self, condition, table_list: List[Table], record: dict):
         def get_record_value(operand):
