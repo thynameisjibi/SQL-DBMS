@@ -308,6 +308,10 @@ class DBMS:
                 pk_updated = False
                 
                 for column_name, value in assignments:
+                    data_type = table.columns[column_name]
+                    if data_type.startswith("char") and value is not None:
+                        max_len = eval_char_max_len(data_type)
+                        value = value[:max_len]
                     new_data[column_name] = value
                     if table.primary_key and column_name in table.primary_key:
                         pk_updated = True
