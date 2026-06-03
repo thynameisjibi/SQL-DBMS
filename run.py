@@ -50,6 +50,7 @@ def main():
                     NonExistingColumnDefError, TableExistenceError, CharLengthError, DropReferencedTableError, 
                     InsertTypeMismatchError, InsertColumnExistenceError, InsertColumnNonNullableError,
                     InsertDuplicatePrimaryKeyError, InsertReferentialIntegrityError,
+                    UpdateReferentialIntegrityError, UpdateTypeMismatchError,
                     SelectTableExistenceError, SelectColumnResolveError, 
                     WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference) as e:
                 print(PROMPT + str(e))
