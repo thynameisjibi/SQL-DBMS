@@ -245,7 +245,29 @@ class SQLTransformer(Transformer):
         else:
             return "is", None
     
-    # not for project 1-2, 1-3
     def update_query(self, items):
         self.statement = items[0].lower()
-        return "'UPDATE' requested"
+        self.table = {
+            "table_name": items[1]
+        }
+        self.record = items[3] if len(items) > 3 else None
+        self.where = items[4] if len(items) > 4 and items[4] else None
+        return items
+    
+    def assignment(self, items):
+        return {
+            "column_name": items[0],
+            "value": items[2]
+        }
+    
+    def begin_query(self, items):
+        self.statement = "begin"
+        return items
+    
+    def commit_query(self, items):
+        self.statement = "commit"
+        return items
+    
+    def rollback_query(self, items):
+        self.statement = "rollback"
+        return items
