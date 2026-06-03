@@ -56,17 +56,31 @@ def eval_char_max_len(data_type):
     return eval(data_type[5:-1])  # char($num) -> $num
     
 def is_valid_type(valid_type, value):
-    if value == None:
+    if value is None:
         return True
+    
     try:
         if valid_type == "int":
-            return isinstance(value, int)
+            return isinstance(value, int) and not isinstance(value, bool)
+        
         elif valid_type.startswith("char"):
-            return isinstance(value, str) and not value.isdigit()  # must check if value is string first to avoid AttributeError
+            if not isinstance(value, str):
+                return False
+            max_len = eval_char_max_len(valid_type)
+            return len(value) <= max_len
+        
         elif valid_type == "date":
-            return re.match(DATE_PATTERN, value)
-    except ValueError:
+            if not isinstance(value, str):
+                return False
+            match = re.match(DATE_PATTERN, value)
+            if not match:
+                return False
+            year, month, day = int(match.group(1)), int(match.group(2)), int(match.group(3))
+            return 1 <= month <= 12 and 1 <= day <= 31
+    except (ValueError, AttributeError):
         return False
+    
+    return False
 
 def is_comparable(a, b):
     def infer_type(value):
