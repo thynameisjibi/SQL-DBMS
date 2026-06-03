@@ -125,7 +125,7 @@ class SQLTransformer(Transformer):
         # type conversion
         if value.startswith("'") and value.endswith("'"):
             value = value[1:-1]
-        elif value.isdigit():
+        elif value.lstrip('-').isdigit():
             value = int(value)
         elif value.lower() == "null":
             value = None
@@ -227,7 +227,7 @@ class SQLTransformer(Transformer):
         # type conversion
         if value.startswith("'") and value.endswith("'"):
             value = value[1:-1]
-        elif value.isdigit():
+        elif value.lstrip('-').isdigit():
             value = int(value)
         return value
     
@@ -245,17 +245,27 @@ class SQLTransformer(Transformer):
         else:
             return "is", None
     
+    def assignment(self, items):
+        # items: [column_name, Token('EQUAL', '='), value]
+        return (items[0], items[2])
+
     def update_query(self, items):
         self.statement = items[0].lower()
+        table_name = items[1]
+        # items[2] is Token('SET', 'SET')
+        # Collect assignments (tuples from assignment()) and optional where_clause (dict)
+        set_columns = []
+        where_clause = None
+        for item in items[3:]:
+            if item is None:
+                where_clause = None
+            elif isinstance(item, tuple) and len(item) == 2:
+                set_columns.append(item)
+            elif isinstance(item, dict):
+                where_clause = item
         self.table = {
-            "table_name": items[1],
-            "assignments": items[3]
+            "table_name": table_name,
+            "set_columns": set_columns
         }
-        self.where = items[4] if len(items) > 4 else None
+        self.where = where_clause
         return items
-
-    def assignment_list(self, items):
-        return [item for item in items if item != ',']
-
-    def assignment(self, items):
-        return (items[0], items[2])  # (column_name, value)

@@ -156,6 +156,50 @@ class InsertReferentialIntegrityError(Exception):  # NOTE: optional
         super().__init__("Insertion has failed: Referential integrity violation")
         
         
+class InsertDateFormatException(Exception):
+    """Raised when date string doesn't match YYYY-MM-DD format."""
+    def __init__(self):
+        super().__init__("Insertion has failed: Date format is not valid (YYYY-MM-DD)")
+        
+        
+class InsertCharLengthExceeded(Exception):
+    """Raised when string exceeds char(N) column length."""
+    def __init__(self, column_name, max_len):
+        self.column_name = column_name
+        self.max_len = max_len
+        super().__init__(f"Insertion has failed: '{self.column_name}' exceeds char({self.max_len}) length")
+        
+        
+class UpdateReferentialIntegrityError(Exception):
+    """Raised when FK constraint is violated on UPDATE."""
+    def __init__(self):
+        super().__init__("Update has failed: Referential integrity violation")
+        
+        
+class UpdateTypeMismatchError(Exception):
+    """Raised when type mismatch occurs on UPDATE."""
+    def __init__(self):
+        super().__init__("Update has failed: Types are not matched")
+        
+        
+class ActiveTransactionError(Exception):
+    """Raised when attempting nested BEGIN."""
+    def __init__(self):
+        super().__init__("Transaction has failed: A transaction is already active")
+        
+        
+class NoActiveTransactionError(Exception):
+    """Raised when COMMIT/ROLLBACK without active BEGIN."""
+    def __init__(self):
+        super().__init__("Transaction has failed: No active transaction")
+        
+        
+class InvalidTransactionStateError(Exception):
+    """Raised for invalid transaction operations."""
+    def __init__(self):
+        super().__init__("Transaction has failed: Invalid transaction state")
+        
+        
 class SelectTableExistenceError(Exception):
     """Raised when the table for selection does not exist."""
     def __init__(self, table_name):
@@ -203,21 +247,3 @@ class UpdateColumnNonNullableError(Exception):
     def __init__(self, column_name):
         self.column_name = column_name
         super().__init__(f"Update has failed: '{self.column_name}' is not nullable")
-
-
-class UpdateTypeMismatchError(Exception):
-    """Raised when the type of the value does not match the type of the column."""
-    def __init__(self):
-        super().__init__("Update has failed: Types are not matched")
-
-
-class UpdatePrimaryKeyError(Exception):
-    """Raised when updating a primary key column."""
-    def __init__(self):
-        super().__init__("Update has failed: Primary key cannot be updated")
-
-
-class UpdateReferentialIntegrityError(Exception):
-    """Raised when the foreign key constraint is violated."""
-    def __init__(self):
-        super().__init__("Update has failed: Referential integrity violation")
