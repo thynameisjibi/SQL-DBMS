@@ -8,8 +8,6 @@ Tests for Issue #1: Phase 0 Foundation
 import pytest
 import sys
 import os
-import tempfile
-import shutil
 
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -39,45 +37,47 @@ class TestExceptions:
     def test_insert_date_format_exception(self):
         e = InsertDateFormatException()
         assert isinstance(e, Exception)
-        assert "date" in str(e).lower() or "format" in str(e).lower()
+        assert str(e) == "Insertion has failed: Date format is not valid (YYYY-MM-DD)"
 
     def test_insert_char_length_exceeded(self):
         e = InsertCharLengthExceeded("name", 20)
         assert isinstance(e, Exception)
-        assert "char" in str(e).lower() or "length" in str(e).lower()
-        assert "name" in str(e)
-        assert "20" in str(e)
+        assert str(e) == "Insertion has failed: 'name' exceeds char(20) length"
 
     def test_update_referential_integrity_error(self):
         e = UpdateReferentialIntegrityError()
         assert isinstance(e, Exception)
-        assert "referential" in str(e).lower() or "integrity" in str(e).lower()
+        assert str(e) == "Update has failed: Referential integrity violation"
 
     def test_update_type_mismatch_error(self):
         e = UpdateTypeMismatchError()
         assert isinstance(e, Exception)
-        assert "type" in str(e).lower() or "mismatch" in str(e).lower()
+        assert str(e) == "Update has failed: Types are not matched"
 
     def test_update_result_is_success_log(self):
         e = UpdateResult(3)
         assert isinstance(e, SuccessLog)
-        assert "3" in str(e)
-        assert "row" in str(e).lower() or "update" in str(e).lower()
+        assert str(e) == "'3' row(s) are updated"
+
+    def test_update_result_zero_rows(self):
+        e = UpdateResult(0)
+        assert isinstance(e, SuccessLog)
+        assert str(e) == "'0' row(s) are updated"
 
     def test_active_transaction_error(self):
         e = ActiveTransactionError()
         assert isinstance(e, Exception)
-        assert "transaction" in str(e).lower() or "active" in str(e).lower()
+        assert str(e) == "Transaction has failed: A transaction is already active"
 
     def test_no_active_transaction_error(self):
         e = NoActiveTransactionError()
         assert isinstance(e, Exception)
-        assert "transaction" in str(e).lower() or "active" in str(e).lower()
+        assert str(e) == "Transaction has failed: No active transaction"
 
     def test_invalid_transaction_state_error(self):
         e = InvalidTransactionStateError()
         assert isinstance(e, Exception)
-        assert "transaction" in str(e).lower() or "state" in str(e).lower()
+        assert str(e) == "Transaction has failed: Invalid transaction state"
 
 
 # --------------------------------------------------------------------------- #
@@ -99,36 +99,42 @@ class TestUpdateGrammar:
         tree = sql_parser.parse(query)
         assert tree is not None
         assert tree.data == "command"
+        assert any(child.data == "update_query" for child in tree.iter_subtrees())
 
     def test_two_assignments_parses(self, sql_parser):
         query = "UPDATE account SET branch_name = 'Downtown', balance = 500 WHERE account_number = 9732;"
         tree = sql_parser.parse(query)
         assert tree is not None
         assert tree.data == "command"
+        assert any(child.data == "update_query" for child in tree.iter_subtrees())
 
     def test_three_assignments_parses(self, sql_parser):
         query = "UPDATE account SET branch_name = 'Downtown', balance = 500, account_type = 'checking' WHERE account_number = 9732;"
         tree = sql_parser.parse(query)
         assert tree is not None
         assert tree.data == "command"
+        assert any(child.data == "update_query" for child in tree.iter_subtrees())
 
     def test_update_without_where_parses(self, sql_parser):
         query = "UPDATE account SET balance = 0;"
         tree = sql_parser.parse(query)
         assert tree is not None
         assert tree.data == "command"
+        assert any(child.data == "update_query" for child in tree.iter_subtrees())
 
     def test_update_complex_where_parses(self, sql_parser):
         query = "UPDATE account SET branch_name = 'Main', balance = 1000 WHERE account_number = 9732 AND balance < 500;"
         tree = sql_parser.parse(query)
         assert tree is not None
         assert tree.data == "command"
+        assert any(child.data == "update_query" for child in tree.iter_subtrees())
 
     def test_multiple_assignments_without_where_parses(self, sql_parser):
         query = "UPDATE account SET branch_name = 'Downtown', balance = 500;"
         tree = sql_parser.parse(query)
         assert tree is not None
         assert tree.data == "command"
+        assert any(child.data == "update_query" for child in tree.iter_subtrees())
 
 
 # --------------------------------------------------------------------------- #
@@ -198,8 +204,10 @@ class TestUpdateTransformer:
         assert transformer.statement == "update"
         assert len(transformer.table["set_columns"]) == 2
         assert transformer.where is not None
-        # The where should be a dict with boolean expression
-        assert isinstance(transformer.where, dict)
+        # Verify AND structure is preserved in nested where dict
+        assert isinstance(transformer.where.get("boolean_terms"), dict)
+        assert transformer.where["boolean_terms"].get("op") == "and"
+        assert isinstance(transformer.where["boolean_terms"].get("boolean_factors", []), list)
 
     def test_multiple_assignments_without_where_transformer(self, sql_parser):
         query = "UPDATE account SET branch_name = 'Downtown', balance = 500;"
@@ -253,7 +261,7 @@ class TestAdversarialEdgeCases:
         transformer = SQLTransformer()
         parsed = sql_parser.parse(query)
         transformer.transform(parsed)
-        assert transformer.table["set_columns"][0] == ("balance", "-500")
+        assert transformer.table["set_columns"][0] == ("balance", -500)
 
     def test_update_with_quoted_keyword_value(self, sql_parser):
         query = "UPDATE account SET status = 'select' WHERE account_number = 9732;"
@@ -276,13 +284,3 @@ class TestAdversarialEdgeCases:
         parsed = sql_parser.parse(query)
         transformer.transform(parsed)
         assert transformer.where is not None
-
-    def test_exception_messages_are_informative(self):
-        assert "date" in str(InsertDateFormatException()).lower()
-        assert "char" in str(InsertCharLengthExceeded("col", 10)).lower()
-        assert "referential" in str(UpdateReferentialIntegrityError()).lower()
-        assert "type" in str(UpdateTypeMismatchError()).lower()
-        assert "3" in str(UpdateResult(3))
-        assert "active" in str(ActiveTransactionError()).lower()
-        assert "no active" in str(NoActiveTransactionError()).lower()
-        assert "invalid" in str(InvalidTransactionStateError()).lower()

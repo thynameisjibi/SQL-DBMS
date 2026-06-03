@@ -125,7 +125,7 @@ class SQLTransformer(Transformer):
         # type conversion
         if value.startswith("'") and value.endswith("'"):
             value = value[1:-1]
-        elif value.isdigit():
+        elif value.lstrip('-').isdigit():
             value = int(value)
         elif value.lower() == "null":
             value = None
@@ -227,7 +227,7 @@ class SQLTransformer(Transformer):
         # type conversion
         if value.startswith("'") and value.endswith("'"):
             value = value[1:-1]
-        elif value.isdigit():
+        elif value.lstrip('-').isdigit():
             value = int(value)
         return value
     
