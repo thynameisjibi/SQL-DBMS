@@ -293,6 +293,143 @@ class DBMS:
         table_db.close_db()
         
         return DeleteResult(success_cnt), DeleteReferentialIntegrityPassed(fail_cnt) if fail_cnt else None
+    
+    
+    def update(self, table_name: str, assignments: list, where_clause: dict):
+        self.meta_db.open_db()
+        table_key = self.meta_db.create_key_from_value(table_name)
+        table = self.meta_db.get(table_key)
+        if not table:
+            raise NoSuchTable()
+        self.meta_db.close_db()
+        
+        # Pass 1: Validate assignments globally
+        for column_name, value in assignments:
+            if column_name not in table.columns:
+                raise UpdateColumnExistenceError(column_name)
+            if value is None and column_name in table.not_null_keys:
+                raise UpdateColumnNonNullableError(column_name)
+            if not is_valid_type(table.columns[column_name], value):
+                raise UpdateTypeMismatchError()
+        
+        # Check if any assignment touches a primary key column
+        pk_columns = set(table.primary_key) if table.primary_key else set()
+        assigned_pk_columns = [col for col, _ in assignments if col in pk_columns]
+        
+        # Pass 2: Apply updates to matching records
+        table_db = DB(table_name)
+        table_db.open_db()
+        cursor = table_db.create_cursor()
+        
+        success_cnt = 0
+        
+        key_value_pair = cursor.first()
+        while key_value_pair:
+            key, value = key_value_pair
+            record = Record.deserialize(value)
+            satisfies = self._evaluate_condition(deepcopy(where_clause), [table], record.data) if where_clause else True
+            if satisfies == True:
+                new_data = dict(record.data)
+                new_primary_value = list(record.primary_value) if record.primary_value else []
+                pk_updated = False
+                
+                for column_name, value in assignments:
+                    data_type = table.columns[column_name]
+                    if data_type.startswith("char") and value is not None:
+                        max_len = eval_char_max_len(data_type)
+                        value = value[:max_len]
+                    new_data[column_name] = value
+                    if table.primary_key and column_name in table.primary_key:
+                        pk_updated = True
+                        idx = table.primary_key.index(column_name)
+                        new_primary_value[idx] = value
+                
+                if pk_updated:
+                    # Check if record is referenced by others
+                    if record.referenced_by and any(record.referenced_by.values()):
+                        raise UpdateReferentialIntegrityError()
+                    
+                    new_primary_value = tuple(new_primary_value) if new_primary_value else None
+                    new_key = table_db.create_key_from_value(new_primary_value) if new_primary_value else table_db.create_random_key()
+                    if new_key != key and table_db.exists(new_key):
+                        raise UpdatePrimaryKeyError()
+                
+                # Validate FK constraints for updated FK columns
+                for column_name, value in assignments:
+                    if table.foreign_keys and column_name in table.foreign_keys:
+                        referenced_table_name, referenced_column_name = table.foreign_keys[column_name]
+                        self.meta_db.open_db()
+                        referenced_table_key = self.meta_db.create_key_from_value(referenced_table_name)
+                        referenced_table = self.meta_db.get(referenced_table_key)
+                        self.meta_db.close_db()
+                        
+                        referenced_table_db = DB(referenced_table_name)
+                        referenced_table_db.open_db()
+                        referenced_key = referenced_table_db.create_key_from_value((value,))
+                        referenced_record = None
+                        if len(referenced_table.primary_key) == 1:
+                            referenced_record = referenced_table_db.get(referenced_key)
+                        else:
+                            all_primary_values = referenced_table_db.keys()
+                            for primary_value in all_primary_values:
+                                if referenced_key.decode() in primary_value.decode():
+                                    referenced_record = referenced_table_db.get(primary_value)
+                                    break
+                        referenced_table_db.close_db()
+                        
+                        if referenced_record is None:
+                            raise UpdateReferentialIntegrityError()
+                
+                # Update referencing info for changed FKs
+                new_referencing = dict(record.referencing)
+                for column_name, value in assignments:
+                    if table.foreign_keys and column_name in table.foreign_keys:
+                        referenced_table_name, referenced_column_name = table.foreign_keys[column_name]
+                        old_value = record.data[column_name]
+                        
+                        # Remove old reference from old referenced record
+                        if old_value is not None:
+                            referenced_table_db = DB(referenced_table_name)
+                            referenced_table_db.open_db()
+                            inner_cursor = referenced_table_db.create_cursor()
+                            kv = inner_cursor.first()
+                            while kv:
+                                k, v = kv
+                                ref_record = Record.deserialize(v)
+                                if (table_name, column_name) in ref_record.referenced_by and old_value in ref_record.referenced_by[(table_name, column_name)]:
+                                    ref_record.remove_referenced_by(table_name, column_name, old_value)
+                                    referenced_table_db.put(k, ref_record)
+                                kv = inner_cursor.next()
+                            referenced_table_db.discard_cursor(inner_cursor)
+                            referenced_table_db.close_db()
+                        
+                        # Add new reference to new referenced record
+                        referenced_table_db = DB(referenced_table_name)
+                        referenced_table_db.open_db()
+                        referenced_key = referenced_table_db.create_key_from_value((value,))
+                        referenced_record = referenced_table_db.get(referenced_key)
+                        if referenced_record:
+                            referenced_record.add_to_referenced_by(table_name, column_name, value)
+                            referenced_table_db.put(referenced_key, referenced_record)
+                        new_referencing[(referenced_table_name, referenced_column_name)] = {value}
+                        referenced_table_db.close_db()
+                
+                new_record = Record(table_name, new_data, tuple(new_primary_value) if new_primary_value else None, new_referencing, record.referenced_by)
+                
+                if pk_updated:
+                    table_db.delete_by_cursor(cursor)
+                    table_db.put(new_key, new_record)
+                else:
+                    table_db.put(key, new_record)
+                
+                success_cnt += 1
+            
+            key_value_pair = cursor.next()
+        
+        table_db.discard_cursor(cursor)
+        table_db.close_db()
+        
+        return UpdateResult(success_cnt)
         
     
     def _get_index_manager(self, table_name: str) -> IndexManager:

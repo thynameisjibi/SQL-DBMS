@@ -38,6 +38,12 @@ class DeleteReferentialIntegrityPassed(SuccessLog):  # NOTE: optional
     def __init__(self, num_deleted):
         self.num_deleted = num_deleted
         super().__init__(f"'{self.num_deleted}' row(s) are not deleted due to referential integrity")
+
+
+class UpdateResult(SuccessLog):
+    def __init__(self, num_updated):
+        self.num_updated = num_updated
+        super().__init__(f"'{self.num_updated}' row(s) are updated")
         
 
 # ---------------------------------------------------------------------------- #
@@ -176,13 +182,6 @@ class UpdateTypeMismatchError(Exception):
         super().__init__("Update has failed: Types are not matched")
         
         
-class UpdateResult(SuccessLog):
-    """Success message with row count for UPDATE operations."""
-    def __init__(self, row_count):
-        self.row_count = row_count
-        super().__init__(f"'{self.row_count}' row(s) are updated")
-        
-        
 class ActiveTransactionError(Exception):
     """Raised when attempting nested BEGIN."""
     def __init__(self):
@@ -234,3 +233,17 @@ class WhereColumnNotExist(Exception):
 class WhereAmbiguousReference(Exception):
     def __init__(self):
         super().__init__(f"Where clause contains ambiguous reference")
+
+
+class UpdateColumnExistenceError(Exception):
+    """Raised when the column does not exist in the table."""
+    def __init__(self, column_name):
+        self.column_name = column_name
+        super().__init__(f"Update has failed: '{self.column_name}' does not exist")
+
+
+class UpdateColumnNonNullableError(Exception):
+    """Raised when the column is non nullable and the value is null."""
+    def __init__(self, column_name):
+        self.column_name = column_name
+        super().__init__(f"Update has failed: '{self.column_name}' is not nullable")

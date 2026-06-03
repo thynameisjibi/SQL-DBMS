@@ -45,6 +45,9 @@ def main():
                 elif statement == "select":
                     output = dbms.select(tables, select_columns, where)
                     print(PROMPT + output)
+                elif statement == "update":
+                    result = dbms.update(table["table_name"], table["set_columns"], where)
+                    print(PROMPT + str(result))
             except (SyntaxError, NoSuchTable, DuplicateColumnDefError, DuplicatePrimaryKeyDefError, 
                     ReferenceTypeError, ReferenceNonPrimaryKeyError, ReferenceColumnExistenceError, ReferenceTableExistenceError, 
                     NonExistingColumnDefError, TableExistenceError, CharLengthError, DropReferencedTableError, 
@@ -53,6 +56,8 @@ def main():
                     UpdateReferentialIntegrityError, UpdateTypeMismatchError,
                     SelectTableExistenceError, SelectColumnResolveError, 
                     WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference,
+                    UpdateColumnExistenceError, UpdateColumnNonNullableError, UpdateTypeMismatchError,
+                    UpdatePrimaryKeyError, UpdateReferentialIntegrityError,
                     ActiveTransactionError, NoActiveTransactionError, InvalidTransactionStateError) as e:
                 print(PROMPT + str(e))
                 break
