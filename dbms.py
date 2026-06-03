@@ -171,9 +171,6 @@ class DBMS:
         primary_value = []
         referencing = dict()
         for (column_name, data_type), value in zip(table.columns.items(), value_list):
-            if data_type.startswith("char") and value is not None:
-                max_len = eval_char_max_len(data_type)
-                value = value[:max_len]
             if table.primary_key and column_name in table.primary_key:  # may be composite primary key
                 primary_value.append(value)
             if table.foreign_keys and column_name in table.foreign_keys:  # one foreign key per column
