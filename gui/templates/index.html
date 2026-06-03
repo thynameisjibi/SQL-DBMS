@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL DBMS Web GUI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 Schema Browser</h2>
+            </div>
+            <div id="table-list-container">
+                <p class="loading-text">Loading tables...</p>
+            </div>
+            <div class="transaction-panel">
+                <h3>🔧 Transaction</h3>
+                <div class="button-group">
+                    <button id="btn-begin" class="btn-transaction btn-begin">BEGIN</button>
+                    <button id="btn-commit" class="btn-transaction btn-commit">COMMIT</button>
+                    <button id="btn-rollback" class="btn-transaction btn-rollback">ROLLBACK</button>
+                </div>
+                <div id="transaction-status" class="status-indicator">No active transaction</div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="app-header">
+                <h1>🗄️ SQL DBMS</h1>
+                <span class="subtitle">Web-Based Database Management System</span>
+            </header>
+
+            <section class="query-editor">
+                <div class="editor-header">
+                    <h3>✏️ SQL Query Editor</h3>
+                    <span class="shortcut-hint">Ctrl+Enter to execute</span>
+                </div>
+                <textarea id="query-input" placeholder="Enter your SQL query here...&#10;&#10;Examples:&#10;CREATE TABLE users (id INT, name CHAR(20), PRIMARY KEY (id));&#10;INSERT INTO users VALUES (1, 'John');&#10;SELECT * FROM users;"></textarea>
+                <div class="button-row">
+                    <button id="btn-execute" class="btn-primary">▶ Execute Query</button>
+                    <button id="btn-clear" class="btn-secondary">Clear</button>
+                    <button id="btn-format" class="btn-secondary">Format</button>
+                </div>
+            </section>
+
+            <section class="results-panel">
+                <div class="results-header">
+                    <h3>📋 Results</h3>
+                    <span id="results-meta" class="results-meta"></span>
+                </div>
+                <div id="results-content">
+                    <p class="placeholder-text">Execute a query to see results here.</p>
+                </div>
+            </section>
+
+            <div id="message-area"></div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
