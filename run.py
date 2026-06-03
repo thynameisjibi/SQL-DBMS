@@ -45,6 +45,18 @@ def main():
                 elif statement == "select":
                     output = dbms.select(tables, select_columns, where)
                     print(PROMPT + output)
+                elif statement == "begin":
+                    result = dbms.begin()
+                    print(PROMPT + str(result))
+                elif statement == "commit":
+                    result = dbms.commit()
+                    print(PROMPT + str(result))
+                elif statement == "rollback":
+                    result = dbms.rollback()
+                    print(PROMPT + str(result))
+                elif statement == "update":
+                    result = dbms.update(table["table_name"], record, where)
+                    print(PROMPT + str(result))
             except (SyntaxError, NoSuchTable, DuplicateColumnDefError, DuplicatePrimaryKeyDefError, 
                     ReferenceTypeError, ReferenceNonPrimaryKeyError, ReferenceColumnExistenceError, ReferenceTableExistenceError, 
                     NonExistingColumnDefError, TableExistenceError, CharLengthError, DropReferencedTableError, 

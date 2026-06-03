@@ -62,6 +62,10 @@ SHOW : "show"i
 UPDATE : "update"i
 SET : "set"i
 
+BEGIN : "begin"i
+COMMIT : "commit"i
+ROLLBACK : "rollback"i
+
 EXIT : "exit"i
 
 
@@ -78,6 +82,9 @@ query : create_table_query
       | select_query
       | show_tables_query
       | update_query
+      | begin_query
+      | commit_query
+      | rollback_query
 
 
 // CREATE TABLE
@@ -151,3 +158,8 @@ show_tables_query : SHOW TABLES
 // UPDATE
 update_query : UPDATE table_name SET assignment ("," assignment)* [where_clause]
 assignment : column_name EQUAL value
+
+// TRANSACTION
+begin_query : BEGIN
+commit_query : COMMIT
+rollback_query : ROLLBACK

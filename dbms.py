@@ -8,6 +8,7 @@ from db_model import Table, Record, DB, MetaDB
 from index import IndexManager
 from utils import *
 from messages import *
+from transaction import Transaction, TransactionLog, TransactionState
 
 
 
@@ -17,6 +18,10 @@ class DBMS:
         self._db_dir.mkdir(exist_ok=True)
         self.meta_db = MetaDB(db_dir=self._db_dir)
         self.index_managers: Dict[str, IndexManager] = {}  # table_name -> IndexManager
+        self.current_transaction = None
+        self.auto_commit = True
+        self.transaction_log = TransactionLog(self.db_dir)
+        self._recover_uncommitted_transactions()
     
     @property
     def db_dir(self):
@@ -158,6 +163,48 @@ class DBMS:
         return output
     
     
+    # ------------------------------------------------------------------------ #
+    # Transaction support                                                      #
+    # ------------------------------------------------------------------------ #
+    
+    def begin(self):
+        """Start a new transaction."""
+        if self.current_transaction is not None:
+            raise ActiveTransactionError()
+        self.current_transaction = Transaction()
+        self.auto_commit = False
+        self.transaction_log.append(self.current_transaction)
+        return BeginSuccess()
+    
+    def commit(self):
+        """Commit the current transaction."""
+        if self.current_transaction is None:
+            raise NoActiveTransactionError()
+        self.current_transaction.commit()
+        self.transaction_log.append(self.current_transaction)
+        self.current_transaction = None
+        self.auto_commit = True
+        return CommitSuccess()
+    
+    def rollback(self):
+        """Rollback the current transaction."""
+        if self.current_transaction is None:
+            raise NoActiveTransactionError()
+        self.current_transaction.rollback(self.db_dir)
+        self.transaction_log.append(self.current_transaction)
+        self.current_transaction = None
+        self.auto_commit = True
+        return RollbackSuccess()
+    
+    def _recover_uncommitted_transactions(self):
+        """Recover uncommitted transactions on startup (crash recovery)."""
+        uncommitted = self.transaction_log.get_uncommitted()
+        for tx in uncommitted:
+            tx.rollback(self.db_dir)
+        if uncommitted:
+            self.transaction_log.clear()
+    
+    
     def insert(self, table_dict: dict, value_list: list):
         table_name = table_dict["table_name"]
         column_name_list = table_dict["column_name_list"]
@@ -236,6 +283,11 @@ class DBMS:
         for column_name, value in data.items():
             index_manager.insert(column_name, value, record_key)
         
+        # Log for transaction rollback
+        if self.current_transaction is not None:
+            self.current_transaction.log_insert(table_name, record_key)
+            self.transaction_log.append(self.current_transaction)
+        
         return InsertResult()
 
     
@@ -264,8 +316,8 @@ class DBMS:
                 else:
                     # Update indexes before deletion
                     index_manager = self._get_index_manager(table_name)
-                    for column_name, value in record.data.items():
-                        index_manager.delete(column_name, value, key)
+                    for column_name, col_value in record.data.items():
+                        index_manager.delete(column_name, col_value, key)
                     
                     if record.referencing:
                         for (referenced_table_name, referenced_column_name), referenced_value_set in record.referencing.items():
@@ -273,18 +325,21 @@ class DBMS:
                                 referenced_table_db = DB(referenced_table_name, self.db_dir)
                                 referenced_table_db.open_db()
                                 inner_cursor = referenced_table_db.create_cursor()
-                                key_value_pair = inner_cursor.first()
-                                while key_value_pair:
-                                    key, value = key_value_pair
-                                    referenced_record = Record.deserialize(value)
+                                inner_kvp = inner_cursor.first()
+                                while inner_kvp:
+                                    inner_key, inner_value = inner_kvp
+                                    referenced_record = Record.deserialize(inner_value)
                                     for column in table.columns:
                                         if ((table_name, column) in referenced_record.referenced_by and 
                                             referenced_value in referenced_record.referenced_by[(table_name, column)]):
                                             referenced_record.remove_referenced_by(table_name, column, referenced_value)
-                                            referenced_table_db.put(key, referenced_record)  # update reference
-                                    key_value_pair = inner_cursor.next()
+                                            referenced_table_db.put(inner_key, referenced_record)  # update reference
+                                    inner_kvp = inner_cursor.next()
                                 referenced_table_db.discard_cursor(inner_cursor)
                                 referenced_table_db.close_db()
+                    # Log for transaction rollback (use original `value` before any inner loop shadowing)
+                    if self.current_transaction is not None:
+                        self.current_transaction.log_delete(table_name, key, value)
                     table_db.delete_by_cursor(outer_cursor)
                     success_cnt += 1
             key_value_pair = outer_cursor.next()
@@ -293,6 +348,61 @@ class DBMS:
         table_db.close_db()
         
         return DeleteResult(success_cnt), DeleteReferentialIntegrityPassed(fail_cnt) if fail_cnt else None
+    
+    
+    def update(self, table_name: str, assignment: dict, where_clause: dict):
+        """Update records in a table."""
+        self.meta_db.open_db()
+        table_key = self.meta_db.create_key_from_value(table_name)
+        table = self.meta_db.get(table_key)
+        if not table:
+            raise NoSuchTable()
+        self.meta_db.close_db()
+        
+        column_name = assignment["column_name"]
+        new_value = assignment["value"]
+        
+        # Validate column exists
+        if column_name not in table.columns:
+            raise InsertColumnExistenceError(column_name)
+        
+        # Validate type
+        if not is_valid_type(table.columns[column_name], new_value):
+            raise InsertTypeMismatchError()
+        
+        # Check not-null constraint
+        if new_value is None and column_name in table.not_null_keys:
+            raise InsertColumnNonNullableError(column_name)
+        
+        table_db = DB(table_name, self.db_dir)
+        table_db.open_db()
+        cursor = table_db.create_cursor()
+        
+        success_cnt = 0
+        key_value_pair = cursor.first()
+        while key_value_pair:
+            key, value = key_value_pair
+            record = Record.deserialize(value)
+            satisfies = self._evaluate_condition(deepcopy(where_clause), [table], record.data) if where_clause else True
+            if satisfies == True:
+                # Log old data for rollback
+                if self.current_transaction is not None:
+                    self.current_transaction.log_update(table_name, key, value)
+                
+                # Apply update
+                record.data[column_name] = new_value
+                table_db.put(key, record)
+                success_cnt += 1
+            key_value_pair = cursor.next()
+        
+        table_db.discard_cursor(cursor)
+        table_db.close_db()
+        
+        # Persist transaction log
+        if self.current_transaction is not None:
+            self.transaction_log.append(self.current_transaction)
+        
+        return UpdateResult(success_cnt)
         
     
     def _get_index_manager(self, table_name: str) -> IndexManager:
