@@ -125,7 +125,7 @@ class SQLTransformer(Transformer):
         # type conversion
         if value.startswith("'") and value.endswith("'"):
             value = value[1:-1]
-        elif value.isdigit():
+        elif value.lstrip('-').isdigit():
             value = int(value)
         elif value.lower() == "null":
             value = None
@@ -227,7 +227,7 @@ class SQLTransformer(Transformer):
         # type conversion
         if value.startswith("'") and value.endswith("'"):
             value = value[1:-1]
-        elif value.isdigit():
+        elif value.lstrip('-').isdigit():
             value = int(value)
         return value
     
@@ -245,7 +245,27 @@ class SQLTransformer(Transformer):
         else:
             return "is", None
     
-    # not for project 1-2, 1-3
+    def assignment(self, items):
+        # items: [column_name, Token('EQUAL', '='), value]
+        return (items[0], items[2])
+
     def update_query(self, items):
         self.statement = items[0].lower()
-        return "'UPDATE' requested"
+        table_name = items[1]
+        # items[2] is Token('SET', 'SET')
+        # Collect assignments (tuples from assignment()) and optional where_clause (dict)
+        set_columns = []
+        where_clause = None
+        for item in items[3:]:
+            if item is None:
+                where_clause = None
+            elif isinstance(item, tuple) and len(item) == 2:
+                set_columns.append(item)
+            elif isinstance(item, dict):
+                where_clause = item
+        self.table = {
+            "table_name": table_name,
+            "set_columns": set_columns
+        }
+        self.where = where_clause
+        return items

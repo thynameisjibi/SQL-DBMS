@@ -50,8 +50,10 @@ def main():
                     NonExistingColumnDefError, TableExistenceError, CharLengthError, DropReferencedTableError, 
                     InsertTypeMismatchError, InsertColumnExistenceError, InsertColumnNonNullableError,
                     InsertDuplicatePrimaryKeyError, InsertReferentialIntegrityError,
+                    UpdateReferentialIntegrityError, UpdateTypeMismatchError,
                     SelectTableExistenceError, SelectColumnResolveError, 
-                    WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference) as e:
+                    WhereIncomparableError, WhereTableNotSpecified, WhereColumnNotExist, WhereAmbiguousReference,
+                    ActiveTransactionError, NoActiveTransactionError, InvalidTransactionStateError) as e:
                 print(PROMPT + str(e))
                 break
             
@@ -72,11 +74,10 @@ def parse_query(sql_parser: Lark, sql_transformer, query):
     """Parses the query and returns the transformed parse tree."""
     try:
         parsed = sql_parser.parse(query)
-    except:
-        raise SyntaxError()
-    else:
-        transformed = sql_transformer.transform(parsed)
-        return transformed
+    except Exception as e:
+        raise SyntaxError() from e
+    transformed = sql_transformer.transform(parsed)
+    return transformed
 
                 
 
